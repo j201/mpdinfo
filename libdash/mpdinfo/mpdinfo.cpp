@@ -19,6 +19,41 @@ bool isContainedInMimeType(dash::mpd::IAdaptationSet *adaptationSet, std::string
 	return false;
 }
 
+std::string showVector(const std::vector<std::string>& v) {
+	std::ostringstream os;
+	for (int i = 0; i < v.size(); i++) {
+		os << v[i];
+		if (i < v.size()-1) {
+			os << ",";
+		}
+	}
+	return os.str();
+}
+
+std::string dumpRepresentationBaseInfo(IRepresentationBase *r) {
+	std::ostringstream os;
+	os << "  Resolution: " << r->GetWidth() << "x" << r->GetHeight() << std::endl;
+	os << "  SAR: " << r->GetSar() << std::endl;
+	os << "  Frame Rate: " << r->GetFrameRate() << std::endl;
+	os << "  Audio Sample Rate: " << r->GetAudioSamplingRate() << std::endl;
+	os << "  MimeType: " << r->GetMimeType() << std::endl;
+	os << "  Codecs: " << showVector(r->GetCodecs()) << std::endl;
+	os << "  Profiles: " << showVector(r->GetProfiles()) << std::endl;
+	os << "  Segment Profiles: " << showVector(r->GetSegmentProfiles()) << std::endl;
+	return os.str();
+}
+
+void dumpRepresentationInfo(IRepresentation *r) {
+	std::cout << "Representation " << r->GetId() << std::endl;
+	std::cout << "  Bandwidth: " << r->GetBandwidth() << "bps" << std::endl;
+	std::cout << dumpRepresentationBaseInfo(r);
+	const std::vector<IBaseUrl *> baseURLs = r->GetBaseURLs();
+	std::cout << "  Base URLs:" << std::endl;
+	for (int i = 0; i < baseURLs.size(); i++) {
+		std::cout << "    " + baseURLs[i]->GetUrl();
+	}
+}
+
 int main(int argc, char *argv[]) {
 	if (argc != 2) {
 		std::cerr << "Usage: mpdinfo.exe <MPD URL>" << std::endl;
@@ -45,12 +80,7 @@ int main(int argc, char *argv[]) {
 				std::vector<IRepresentation *> representations = adaptationSets.at(i)->GetRepresentation();
 
 				for (size_t i = 0; i < representations.size(); i++) {
-					IRepresentation *representation = representations.at(i);
-
-					std::cout << representation->GetId() << " "
-						<< representation->GetBandwidth() << " bps "
-						<< representation->GetWidth() << "x" << representation->GetHeight()
-						<< std::endl;
+					dumpRepresentationInfo(representations.at(i));
 				}
 			}
 		}
