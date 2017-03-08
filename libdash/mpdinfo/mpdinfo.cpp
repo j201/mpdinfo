@@ -78,8 +78,9 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (mpd->GetPeriods().size() > 0) {
-		IPeriod *period = mpd->GetPeriods().at(0);
+	for (size_t i = 0; i < mpd->GetPeriods().size(); i++) {
+		IPeriod *period = mpd->GetPeriods().at(i);
+		std::cout << "Period " << i << std::endl;
 
 		std::vector<IAdaptationSet *> adaptationSets = period->GetAdaptationSets();
 
