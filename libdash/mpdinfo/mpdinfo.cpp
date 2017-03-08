@@ -37,7 +37,7 @@ std::string showVector(const std::vector<std::string>& v) {
 	return os.str();
 }
 
-std::string dumpRepresentationBaseInfo(IRepresentationBase *r) {
+std::string representationBaseInfo(IRepresentationBase *r) {
 	std::ostringstream os;
 	os << "  Resolution: " << r->GetWidth() << "x" << r->GetHeight() << std::endl;
 	os << showProperty("SAR", r->GetSar());
@@ -50,10 +50,35 @@ std::string dumpRepresentationBaseInfo(IRepresentationBase *r) {
 	return os.str();
 }
 
+std::string segmentInfo(ISegmentTemplate* segmentTemplate, ISegmentBase* segmentBase, ISegmentList* segmentList) {
+	std::ostringstream os;
+	if (segmentTemplate) {
+		os << showProperty("Segment Template", segmentTemplate->Getmedia());
+	}
+
+	if (segmentList) {
+		std::vector<ISegmentURL *> segmentURLs = segmentList->GetSegmentURLs();
+		for (size_t i = 0; i < segmentURLs.size(); i++) {
+			if (!segmentURLs[i]->GetMediaURI().empty())
+				os << "    Segment " << i << " media URI: " << segmentURLs[i]->GetMediaURI() << std::endl;
+			if (!segmentURLs[i]->GetIndexURI().empty())
+				os << "    Segment " << i << " index URI: " << segmentURLs[i]->GetIndexURI() << std::endl;
+		}
+	}
+
+	if (segmentBase) {
+		if (segmentBase->GetInitialization())
+			os << showProperty("Segment Base Initialization URL", segmentBase->GetInitialization()->GetSourceURL());
+		if (segmentBase->GetRepresentationIndex())
+			os << showProperty("Segment Base Index URL", segmentBase->GetRepresentationIndex()->GetSourceURL());
+	}
+	return os.str();
+}
+
 void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << "Representation " << r->GetId() << std::endl;
 	std::cout << "  Bandwidth: " << r->GetBandwidth() << "bps" << std::endl;
-	std::cout << dumpRepresentationBaseInfo(r);
+	std::cout << representationBaseInfo(r);
 	const std::vector<IBaseUrl *> baseURLs = r->GetBaseURLs();
 	if (!baseURLs.empty()) {
 		std::cout << "  Base URLs:" << std::endl;
@@ -62,13 +87,7 @@ void dumpRepresentationInfo(IRepresentation *r) {
 		}
 	}
 
-	std::vector<ISegmentURL *> segmentURLs = r->GetSegmentList()->GetSegmentURLs();
-	for (size_t i = 0; i < segmentURLs.size(); i++) {
-		if (!segmentURLs[i]->GetMediaURI().empty())
-			std::cout << "    Segment " << i << " media URI: " << segmentURLs[i]->GetMediaURI() << std::endl;
-		if (!segmentURLs[i]->GetIndexURI().empty())
-			std::cout << "    Segment " << i << " index URI: " << segmentURLs[i]->GetIndexURI() << std::endl;
-	}
+	std::cout << segmentInfo(r->GetSegmentTemplate(), r->GetSegmentBase(), r->GetSegmentList());
 }
 
 int main(int argc, char *argv[]) {
@@ -98,6 +117,16 @@ int main(int argc, char *argv[]) {
 		IPeriod *period = mpd->GetPeriods().at(i);
 		std::cout << "Period " << i << std::endl;
 
+		const std::vector<IBaseUrl *> baseURLs = period->GetBaseURLs();
+		if (!baseURLs.empty()) {
+			std::cout << "Base URLs:" << std::endl;
+			for (size_t i = 0; i < baseURLs.size(); i++) {
+				std::cout << "  " << baseURLs[i]->GetUrl() << std::endl;
+			}
+		}
+
+		std::cout << segmentInfo(period->GetSegmentTemplate(), period->GetSegmentBase(), period->GetSegmentList());
+
 		std::vector<IAdaptationSet *> adaptationSets = period->GetAdaptationSets();
 
 		for (size_t i = 0; i < adaptationSets.size(); i++) {
@@ -111,6 +140,9 @@ int main(int argc, char *argv[]) {
 						std::cout << "    " << baseURLs[i]->GetUrl() << std::endl;
 					}
 				}
+
+				std::cout << segmentInfo(adaptationSet->GetSegmentTemplate(), adaptationSet->GetSegmentBase(), adaptationSet->GetSegmentList());
+
 				std::vector<IRepresentation *> representations = adaptationSet->GetRepresentation();
 
 				for (size_t i = 0; i < representations.size(); i++) {
@@ -118,7 +150,7 @@ int main(int argc, char *argv[]) {
 					const std::vector<ISubRepresentation *> subRepresentations = representations.at(i)->GetSubRepresentations();
 					for (size_t i = 0; i < subRepresentations.size(); i++) {
 						std::cout << "SubRepresentation " << i << std::endl;
-						std::cout << dumpRepresentationBaseInfo(subRepresentations.at(i));
+						std::cout << representationBaseInfo(subRepresentations.at(i));
 					}
 				}
 			}
