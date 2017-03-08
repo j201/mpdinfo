@@ -19,6 +19,13 @@ bool isContainedInMimeType(dash::mpd::IAdaptationSet *adaptationSet, std::string
 	return false;
 }
 
+std::string showProperty(const char* name, std::string value) {
+	if (value.empty()) return std::string("");
+	std::ostringstream os;
+	os << "  " << name << ": " << value << std::endl;
+	return os.str();
+}
+
 std::string showVector(const std::vector<std::string>& v) {
 	std::ostringstream os;
 	for (int i = 0; i < v.size(); i++) {
@@ -33,13 +40,13 @@ std::string showVector(const std::vector<std::string>& v) {
 std::string dumpRepresentationBaseInfo(IRepresentationBase *r) {
 	std::ostringstream os;
 	os << "  Resolution: " << r->GetWidth() << "x" << r->GetHeight() << std::endl;
-	os << "  SAR: " << r->GetSar() << std::endl;
-	os << "  Frame Rate: " << r->GetFrameRate() << std::endl;
-	os << "  Audio Sample Rate: " << r->GetAudioSamplingRate() << std::endl;
-	os << "  MimeType: " << r->GetMimeType() << std::endl;
-	os << "  Codecs: " << showVector(r->GetCodecs()) << std::endl;
-	os << "  Profiles: " << showVector(r->GetProfiles()) << std::endl;
-	os << "  Segment Profiles: " << showVector(r->GetSegmentProfiles()) << std::endl;
+	os << showProperty("SAR", r->GetSar());
+	os << showProperty("Frame Rate", r->GetFrameRate());
+	os << showProperty("Audio Sample Rate", r->GetAudioSamplingRate());
+	os << showProperty("MimeType", r->GetMimeType());
+	os << showProperty("Codecs", showVector(r->GetCodecs()));
+	os << showProperty("Profiles", showVector(r->GetProfiles()));
+	os << showProperty("Segment Profiles", showVector(r->GetSegmentProfiles()));
 	return os.str();
 }
 
@@ -48,9 +55,11 @@ void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << "  Bandwidth: " << r->GetBandwidth() << "bps" << std::endl;
 	std::cout << dumpRepresentationBaseInfo(r);
 	const std::vector<IBaseUrl *> baseURLs = r->GetBaseURLs();
-	std::cout << "  Base URLs:" << std::endl;
-	for (int i = 0; i < baseURLs.size(); i++) {
-		std::cout << "    " + baseURLs[i]->GetUrl();
+	if (!baseURLs.empty()) {
+		std::cout << "  Base URLs:" << std::endl;
+		for (int i = 0; i < baseURLs.size(); i++) {
+			std::cout << "    " + baseURLs[i]->GetUrl();
+		}
 	}
 }
 
@@ -75,12 +84,25 @@ int main(int argc, char *argv[]) {
 		std::vector<IAdaptationSet *> adaptationSets = period->GetAdaptationSets();
 
 		for (size_t i = 0; i < adaptationSets.size(); i++) {
-			if (isContainedInMimeType(adaptationSets.at(i), "video")) {
+			IAdaptationSet* adaptationSet = adaptationSets.at(i);
+			if (isContainedInMimeType(adaptationSet, "video")) {
 				std::cout << "Adaptation set " << i << std::endl;
-				std::vector<IRepresentation *> representations = adaptationSets.at(i)->GetRepresentation();
+				const std::vector<IBaseUrl *> baseURLs = adaptationSet->GetBaseURLs();
+				if (!baseURLs.empty()) {
+					std::cout << "  Base URLs:" << std::endl;
+					for (int i = 0; i < baseURLs.size(); i++) {
+						std::cout << "    " + baseURLs[i]->GetUrl();
+					}
+				}
+				std::vector<IRepresentation *> representations = adaptationSet->GetRepresentation();
 
 				for (size_t i = 0; i < representations.size(); i++) {
 					dumpRepresentationInfo(representations.at(i));
+					const std::vector<ISubRepresentation *> subRepresentations = representations.at(i)->GetSubRepresentations();
+					for (int i = 0; i < subRepresentations.size(); i++) {
+						std::cout << "SubRepresentation " << i << std::endl;
+						std::cout << dumpRepresentationBaseInfo(subRepresentations.at(i));
+					}
 				}
 			}
 		}
