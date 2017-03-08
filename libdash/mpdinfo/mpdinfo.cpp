@@ -28,7 +28,7 @@ std::string showProperty(const char* name, std::string value) {
 
 std::string showVector(const std::vector<std::string>& v) {
 	std::ostringstream os;
-	for (int i = 0; i < v.size(); i++) {
+	for (size_t i = 0; i < v.size(); i++) {
 		os << v[i];
 		if (i < v.size()-1) {
 			os << ",";
@@ -57,7 +57,7 @@ void dumpRepresentationInfo(IRepresentation *r) {
 	const std::vector<IBaseUrl *> baseURLs = r->GetBaseURLs();
 	if (!baseURLs.empty()) {
 		std::cout << "  Base URLs:" << std::endl;
-		for (int i = 0; i < baseURLs.size(); i++) {
+		for (size_t i = 0; i < baseURLs.size(); i++) {
 			std::cout << "    " + baseURLs[i]->GetUrl();
 		}
 	}
@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
 				const std::vector<IBaseUrl *> baseURLs = adaptationSet->GetBaseURLs();
 				if (!baseURLs.empty()) {
 					std::cout << "  Base URLs:" << std::endl;
-					for (int i = 0; i < baseURLs.size(); i++) {
+					for (size_t i = 0; i < baseURLs.size(); i++) {
 						std::cout << "    " + baseURLs[i]->GetUrl();
 					}
 				}
@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 				for (size_t i = 0; i < representations.size(); i++) {
 					dumpRepresentationInfo(representations.at(i));
 					const std::vector<ISubRepresentation *> subRepresentations = representations.at(i)->GetSubRepresentations();
-					for (int i = 0; i < subRepresentations.size(); i++) {
+					for (size_t i = 0; i < subRepresentations.size(); i++) {
 						std::cout << "SubRepresentation " << i << std::endl;
 						std::cout << dumpRepresentationBaseInfo(subRepresentations.at(i));
 					}
