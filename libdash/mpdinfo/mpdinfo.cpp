@@ -58,8 +58,16 @@ void dumpRepresentationInfo(IRepresentation *r) {
 	if (!baseURLs.empty()) {
 		std::cout << "  Base URLs:" << std::endl;
 		for (size_t i = 0; i < baseURLs.size(); i++) {
-			std::cout << "    " + baseURLs[i]->GetUrl();
+			std::cout << "    " << baseURLs[i]->GetUrl() << std::endl;
 		}
+	}
+
+	std::vector<ISegmentURL *> segmentURLs = r->GetSegmentList()->GetSegmentURLs();
+	for (size_t i = 0; i < segmentURLs.size(); i++) {
+		if (!segmentURLs[i]->GetMediaURI().empty())
+			std::cout << "    Segment " << i << " media URI: " << segmentURLs[i]->GetMediaURI() << std::endl;
+		if (!segmentURLs[i]->GetIndexURI().empty())
+			std::cout << "    Segment " << i << " index URI: " << segmentURLs[i]->GetIndexURI() << std::endl;
 	}
 }
 
@@ -78,6 +86,14 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	const std::vector<IBaseUrl *> baseURLs = mpd->GetBaseUrls();
+	if (!baseURLs.empty()) {
+		std::cout << "MPD Base URLs:" << std::endl;
+		for (size_t i = 0; i < baseURLs.size(); i++) {
+			std::cout << "  " << baseURLs[i]->GetUrl() << std::endl;
+		}
+	}
+
 	for (size_t i = 0; i < mpd->GetPeriods().size(); i++) {
 		IPeriod *period = mpd->GetPeriods().at(i);
 		std::cout << "Period " << i << std::endl;
@@ -92,7 +108,7 @@ int main(int argc, char *argv[]) {
 				if (!baseURLs.empty()) {
 					std::cout << "  Base URLs:" << std::endl;
 					for (size_t i = 0; i < baseURLs.size(); i++) {
-						std::cout << "    " + baseURLs[i]->GetUrl();
+						std::cout << "    " << baseURLs[i]->GetUrl() << std::endl;
 					}
 				}
 				std::vector<IRepresentation *> representations = adaptationSet->GetRepresentation();
