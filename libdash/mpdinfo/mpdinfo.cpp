@@ -1,7 +1,10 @@
+#include <windows.h>
 #include "libdash.h"
 
 using namespace dash;
 using namespace dash::mpd;
+using namespace dash::network;
+using namespace dash::metrics;
 
 bool isContainedInMimeType(dash::mpd::IAdaptationSet *adaptationSet, std::string value) {
 	std::string topMimeType = adaptationSet->GetMimeType();
@@ -75,9 +78,8 @@ std::string segmentInfo(ISegmentTemplate* segmentTemplate, ISegmentBase* segment
 	return os.str();
 }
 
-
-std::vector<dash::mpd::IBaseUrl*> allBaseURLs(IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet) {
-	std::vector<dash::mpd::IBaseUrl*> baseURLs;
+std::vector<IBaseUrl*> allBaseURLs(IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet) {
+	std::vector<IBaseUrl*> baseURLs;
 
 	if (!mpd->GetBaseUrls().empty())
 		baseURLs.push_back(mpd->GetBaseUrls().at(0));
@@ -95,6 +97,50 @@ std::vector<dash::mpd::IBaseUrl*> allBaseURLs(IMPD *mpd, IPeriod *period, IAdapt
 	return baseURLs;
 }
 
+std::vector<ISegment*> baseSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentBase* segmentBase, IRepresentation *representation) {
+	std::vector<ISegment*> segments;
+
+	if (segmentBase->GetInitialization())
+		segments.push_back(segmentBase->GetInitialization()->ToSegment(baseURLs));
+
+	if (segmentBase->GetRepresentationIndex())
+		segments.push_back(segmentBase->GetInitialization()->ToSegment(baseURLs));
+
+	if (!representation->GetBaseURLs().empty()) {
+		std::vector<IBaseUrl*> representationURLs = representation->GetBaseURLs();
+		for (size_t i = 0; i < representationURLs.size(); i++) {
+			segments.push_back(representationURLs[i]->ToMediaSegment(baseURLs));
+		}
+	}
+
+	return segments;
+}
+
+
+std::vector<ISegment*> representationSegments(std::vector<IBaseUrl*>& baseURLs, IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet, IRepresentation *representation) {
+	if (representation->GetSegmentList()) {
+	} else if (representation->GetSegmentTemplate()) {
+	} else if (representation->GetSegmentBase()) {
+		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
+	} else if (adaptationSet->GetSegmentList()) {
+	} else if (adaptationSet->GetSegmentTemplate()) {
+	} else if (adaptationSet->GetSegmentBase()) {
+		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
+	} else if (period->GetSegmentList()) {
+	} else if (period->GetSegmentTemplate()) {
+	} else if (period->GetSegmentBase()) {
+		return baseSegments(baseURLs, period->GetSegmentBase(), representation);
+	} else if (!representation->GetBaseURLs().empty()) {
+		std::vector<ISegment*> segments;
+		std::vector<IBaseUrl*> representationURLs = representation->GetBaseURLs();
+		for (size_t i = 0; i < representationURLs.size(); i++) {
+			segments.push_back(representationURLs[i]->ToMediaSegment(baseURLs));
+		}
+		return segments;
+	}
+	return std::vector<ISegment*>();
+}
+
 void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << "Representation " << r->GetId() << std::endl;
 	std::cout << "  Bandwidth: " << r->GetBandwidth() << "bps" << std::endl;
@@ -109,6 +155,21 @@ void dumpRepresentationInfo(IRepresentation *r) {
 
 	std::cout << segmentInfo(r->GetSegmentTemplate(), r->GetSegmentBase(), r->GetSegmentList());
 }
+
+void dumpTransactionInfo(IHTTPTransaction *t) {
+	std::cout << std::endl;
+	std::cout << "Download ended from " << t->OriginalUrl() << std::endl;
+	std::cout << "Response code: " << t->ResponseCode() << std::endl;
+	std::cout << "HTTP Header: " << t->HTTPHeader() << std::endl;
+}
+
+struct DownloadTracker : public IDownloadObserver {
+	DownloadState state = NOT_STARTED;
+	void OnDownloadRateChanged  (uint64_t bytesDownloaded) {}
+	void OnDownloadStateChanged (DownloadState state) {
+		this->state = state;
+	}
+};
 
 int main(int argc, char *argv[]) {
 	if (argc != 2) {
@@ -183,11 +244,31 @@ int main(int argc, char *argv[]) {
 				std::vector<IRepresentation *> representations = adaptationSet->GetRepresentation();
 
 				for (size_t i = 0; i < representations.size(); i++) {
-					dumpRepresentationInfo(representations.at(i));
-					const std::vector<ISubRepresentation *> subRepresentations = representations.at(i)->GetSubRepresentations();
+					IRepresentation* representation = representations.at(i);
+					dumpRepresentationInfo(representation);
+					const std::vector<ISubRepresentation *> subRepresentations = representation->GetSubRepresentations();
 					for (size_t i = 0; i < subRepresentations.size(); i++) {
 						std::cout << "SubRepresentation " << i << std::endl;
 						std::cout << representationBaseInfo(subRepresentations.at(i));
+					}
+				}
+
+				if (!representations.empty()) {
+					// For now, only try to download the first representation
+					IRepresentation* representation = representations[0];
+
+					std::vector<IBaseUrl*> baseURLs = allBaseURLs(mpd, period, adaptationSet);
+					std::vector<ISegment*> segments = representationSegments(baseURLs, mpd, period, adaptationSet, representation);
+					// Just download everything in series for now
+					for (size_t i = 0; i < segments.size(); i++) {
+						DownloadTracker downloadTracker;
+						segments[i]->AttachDownloadObserver(&downloadTracker);
+						segments[i]->StartDownload();
+						while (downloadTracker.state != COMPLETED && downloadTracker.state != ABORTED)
+							Sleep(100);
+						std::vector<IHTTPTransaction*> transactions = segments[i]->GetHTTPTransactionList();
+						for (size_t i = 0; i < transactions.size(); i++)
+							dumpTransactionInfo(transactions[i]);
 					}
 				}
 			}
