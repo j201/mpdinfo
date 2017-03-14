@@ -75,6 +75,26 @@ std::string segmentInfo(ISegmentTemplate* segmentTemplate, ISegmentBase* segment
 	return os.str();
 }
 
+
+std::vector<dash::mpd::IBaseUrl*> allBaseURLs(IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet) {
+	std::vector<dash::mpd::IBaseUrl*> baseURLs;
+
+	if (!mpd->GetBaseUrls().empty())
+		baseURLs.push_back(mpd->GetBaseUrls().at(0));
+	if (!period->GetBaseURLs().empty())
+		baseURLs.push_back(period->GetBaseURLs().at(0));
+	if (!adaptationSet->GetBaseURLs().empty())
+		baseURLs.push_back(adaptationSet->GetBaseURLs().at(0));
+
+	// TODO: This is a bad check for absolute URLs (excludes FTP, IP addresses, possibly others)
+	if (baseURLs.empty() ||
+			(baseURLs.at(0)->GetUrl().substr(0,5) != "http:" && baseURLs.at(0)->GetUrl().substr(0,6) != "https:")) {
+		baseURLs.insert(baseURLs.begin(), mpd->GetMPDPathBaseUrl());
+	}
+
+	return baseURLs;
+}
+
 void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << "Representation " << r->GetId() << std::endl;
 	std::cout << "  Bandwidth: " << r->GetBandwidth() << "bps" << std::endl;
@@ -140,6 +160,23 @@ int main(int argc, char *argv[]) {
 						std::cout << "    " << baseURLs[i]->GetUrl() << std::endl;
 					}
 				}
+
+				std::string fullBaseURL = "";
+				{
+					std::vector<IBaseUrl*> baseURLs = allBaseURLs(mpd, period, adaptationSet);
+					for (size_t i = 0; i < baseURLs.size(); i++) {
+						std::string baseURL = baseURLs.at(i)->GetUrl();
+						if (fullBaseURL == "") {
+							fullBaseURL = baseURL;
+						} else if (baseURL != "") {
+							if (baseURL.at(0) == '/' && fullBaseURL.at(fullBaseURL.size() - 1) == '/')
+								fullBaseURL += baseURL.substr(1, -1);
+							else if (baseURL.at(0) != '/' && fullBaseURL.at(fullBaseURL.size() - 1) != '/')
+								fullBaseURL += "/" + baseURL;
+						}
+					}
+				}
+				std::cout << showProperty("Full base URL", fullBaseURL);
 
 				std::cout << segmentInfo(adaptationSet->GetSegmentTemplate(), adaptationSet->GetSegmentBase(), adaptationSet->GetSegmentList());
 
