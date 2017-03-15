@@ -136,20 +136,71 @@ std::vector<ISegment*> listSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentLi
 	return segments;
 }
 
+std::vector<ISegment*> templateSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentTemplate* segmentTemplate, IRepresentation *representation) {
+	std::vector<ISegment*> segments;
+
+	if (segmentTemplate->GetInitialization()) {
+		segments.push_back(segmentTemplate->GetInitialization()->ToSegment(baseURLs));
+	} else {
+		ISegment* s = segmentTemplate->ToInitializationSegment(baseURLs, representation->GetId(), representation->GetBandwidth());
+		if (s) segments.push_back(s);
+	}
+
+	if (segmentTemplate->GetBitstreamSwitching()) {
+		segments.push_back(segmentTemplate->GetBitstreamSwitching()->ToSegment(baseURLs));
+	} else {
+		ISegment* s = segmentTemplate->ToBitstreamSwitchingSegment(baseURLs, representation->GetId(), representation->GetBandwidth());
+		if (s) segments.push_back(s);
+	}
+
+	if (segmentTemplate->GetSegmentTimeline()) {
+		// Calculate segment start times
+		std::vector<uint32_t> startTimes;
+
+		std::vector<ITimeline*> timelines = segmentTemplate->GetSegmentTimeline()->GetTimelines();
+		for (size_t i = 0; i < timelines.size(); i++) {
+			for (uint32_t j = 0; j <= timelines[i]->GetRepeatCount(); j++) {
+				startTimes.push_back(timelines[i]->GetStartTime() + j * timelines[i]->GetDuration());
+			}
+		}
+
+		for (size_t i = 0; i < timelines.size(); i++) {
+			ISegment* s = segmentTemplate->GetIndexSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]);
+			if (s) segments.push_back(s);
+			s = segmentTemplate->GetMediaSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]);
+			if (s) segments.push_back(s);
+		}
+	} else {
+		uint32_t nSegments = 1; // TODO: calculate from overall time and segment duration
+		for (uint32_t i = 0; i < nSegments; i++) {
+			ISegment* s = segmentTemplate->GetIndexSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i);
+			if (s) segments.push_back(s);
+			s = segmentTemplate->GetMediaSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i);
+			if (s) segments.push_back(s);
+		}
+	}
+
+	return segments;
+}
+
+
 std::vector<ISegment*> representationSegments(std::vector<IBaseUrl*>& baseURLs, IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet, IRepresentation *representation) {
 	if (representation->GetSegmentList()) {
 		return listSegments(baseURLs, representation->GetSegmentList());
 	} else if (representation->GetSegmentTemplate()) {
+		return templateSegments(baseURLs, adaptationSet->GetSegmentTemplate(), representation);
 	} else if (representation->GetSegmentBase()) {
 		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
 	} else if (adaptationSet->GetSegmentList()) {
 		return listSegments(baseURLs, adaptationSet->GetSegmentList());
 	} else if (adaptationSet->GetSegmentTemplate()) {
+		return templateSegments(baseURLs, adaptationSet->GetSegmentTemplate(), representation);
 	} else if (adaptationSet->GetSegmentBase()) {
 		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
 	} else if (period->GetSegmentList()) {
 		return listSegments(baseURLs, period->GetSegmentList());
 	} else if (period->GetSegmentTemplate()) {
+		return templateSegments(baseURLs, period->GetSegmentTemplate(), representation);
 	} else if (period->GetSegmentBase()) {
 		return baseSegments(baseURLs, period->GetSegmentBase(), representation);
 	} else if (!representation->GetBaseURLs().empty()) {
