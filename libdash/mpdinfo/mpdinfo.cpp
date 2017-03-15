@@ -106,27 +106,49 @@ std::vector<ISegment*> baseSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentBa
 	if (segmentBase->GetRepresentationIndex())
 		segments.push_back(segmentBase->GetInitialization()->ToSegment(baseURLs));
 
-	if (!representation->GetBaseURLs().empty()) {
-		std::vector<IBaseUrl*> representationURLs = representation->GetBaseURLs();
-		for (size_t i = 0; i < representationURLs.size(); i++) {
-			segments.push_back(representationURLs[i]->ToMediaSegment(baseURLs));
-		}
+	std::vector<IBaseUrl*> representationURLs = representation->GetBaseURLs();
+	for (size_t i = 0; i < representationURLs.size(); i++) {
+		segments.push_back(representationURLs[i]->ToMediaSegment(baseURLs));
 	}
 
 	return segments;
 }
 
+std::vector<ISegment*> listSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentList* segmentList) {
+	std::vector<ISegment*> segments;
+
+	if (segmentList->GetInitialization())
+		segments.push_back(segmentList->GetInitialization()->ToSegment(baseURLs));
+
+	if (segmentList->GetBitstreamSwitching())
+		segments.push_back(segmentList->GetBitstreamSwitching()->ToSegment(baseURLs));
+
+	std::vector<ISegmentURL*> segmentURLs = segmentList->GetSegmentURLs();
+	for (size_t i = 0; i < segmentURLs.size(); i++) {
+		ISegment* indexSegment = segmentURLs[i]->ToIndexSegment(baseURLs);
+		if (indexSegment)
+			segments.push_back(indexSegment);
+		ISegment* mediaSegment = segmentURLs[i]->ToMediaSegment(baseURLs);
+		if (mediaSegment)
+			segments.push_back(mediaSegment);
+	}
+
+	return segments;
+}
 
 std::vector<ISegment*> representationSegments(std::vector<IBaseUrl*>& baseURLs, IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet, IRepresentation *representation) {
 	if (representation->GetSegmentList()) {
+		return listSegments(baseURLs, representation->GetSegmentList());
 	} else if (representation->GetSegmentTemplate()) {
 	} else if (representation->GetSegmentBase()) {
 		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
 	} else if (adaptationSet->GetSegmentList()) {
+		return listSegments(baseURLs, adaptationSet->GetSegmentList());
 	} else if (adaptationSet->GetSegmentTemplate()) {
 	} else if (adaptationSet->GetSegmentBase()) {
 		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
 	} else if (period->GetSegmentList()) {
+		return listSegments(baseURLs, period->GetSegmentList());
 	} else if (period->GetSegmentTemplate()) {
 	} else if (period->GetSegmentBase()) {
 		return baseSegments(baseURLs, period->GetSegmentBase(), representation);
