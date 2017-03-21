@@ -224,9 +224,6 @@ void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << segmentInfo(r->GetSegmentTemplate(), r->GetSegmentBase(), r->GetSegmentList());
 }
 
-void dumpTransactionInfo(IHTTPTransaction *t) {
-}
-
 class DownloadTracker : public IDownloadObserver {
 private:
 	uint64_t startTime;
@@ -234,8 +231,12 @@ private:
 public:
 	DownloadState state = NOT_STARTED;
 	uint64_t dlTime; // in ms
+	uint64_t bytesDownloaded;
 
-	void OnDownloadRateChanged  (uint64_t bytesDownloaded) {}
+	void OnDownloadRateChanged  (uint64_t bytesDownloaded) {
+		this->bytesDownloaded = bytesDownloaded;
+	}
+
 	void OnDownloadStateChanged (DownloadState state) {
 		this->state = state;
 		switch(state) {
@@ -259,13 +260,19 @@ void downloadSegment(ISegment* s) {
 	while (downloadTracker.state != COMPLETED && downloadTracker.state != ABORTED)
 		Sleep(100);
 
-	std::cout << std::endl;
-	std::cout << "Download time: " << downloadTracker.dlTime << "ms" << std::endl;
-	std::vector<IHTTPTransaction*> transactions = s->GetHTTPTransactionList();
-	for (size_t i = 0; i < transactions.size(); i++) {
-		std::cout << "Download ended from " << transactions[i]->OriginalUrl() << std::endl;
-		std::cout << "Response code: " << transactions[i]->ResponseCode() << std::endl;
-		std::cout << "HTTP Header: " << transactions[i]->HTTPHeader() << std::endl;
+	if (downloadTracker.state == ABORTED) {
+		std::cout << "Download aborted" << std::endl;
+	} else {
+		std::cout << std::endl;
+		std::cout << "Download time: " << downloadTracker.dlTime << "ms" << std::endl;
+		std::cout << "Download size: " << downloadTracker.bytesDownloaded << "B" << std::endl;
+		std::cout << "Download rate: " << (float)downloadTracker.bytesDownloaded * 8 / downloadTracker.dlTime << "kbps" << std::endl;
+		std::vector<IHTTPTransaction*> transactions = s->GetHTTPTransactionList();
+		for (size_t i = 0; i < transactions.size(); i++) {
+			std::cout << "Download succeeeded from " << transactions[i]->OriginalUrl() << std::endl;
+			std::cout << "Response code: " << transactions[i]->ResponseCode() << std::endl;
+			std::cout << "HTTP Header: " << transactions[i]->HTTPHeader() << std::endl;
+		}
 	}
 }
 
