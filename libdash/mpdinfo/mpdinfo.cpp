@@ -97,19 +97,24 @@ std::vector<IBaseUrl*> allBaseURLs(IMPD *mpd, IPeriod *period, IAdaptationSet *a
 	return baseURLs;
 }
 
+template <typename T>
+void pushIfNotNull(std::vector<T> &v, T t) {
+	if (t)
+		v.push_back(t);
+}
+
 std::vector<ISegment*> baseSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentBase* segmentBase, IRepresentation *representation) {
 	std::vector<ISegment*> segments;
 
 	if (segmentBase->GetInitialization())
-		segments.push_back(segmentBase->GetInitialization()->ToSegment(baseURLs));
+		pushIfNotNull(segments, segmentBase->GetInitialization()->ToSegment(baseURLs));
 
 	if (segmentBase->GetRepresentationIndex())
-		segments.push_back(segmentBase->GetInitialization()->ToSegment(baseURLs));
+		pushIfNotNull(segments, segmentBase->GetRepresentationIndex()->ToSegment(baseURLs));
 
 	std::vector<IBaseUrl*> representationURLs = representation->GetBaseURLs();
-	for (size_t i = 0; i < representationURLs.size(); i++) {
-		segments.push_back(representationURLs[i]->ToMediaSegment(baseURLs));
-	}
+	for (size_t i = 0; i < representationURLs.size(); i++)
+		pushIfNotNull(segments, representationURLs[i]->ToMediaSegment(baseURLs));
 
 	return segments;
 }
@@ -118,19 +123,15 @@ std::vector<ISegment*> listSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentLi
 	std::vector<ISegment*> segments;
 
 	if (segmentList->GetInitialization())
-		segments.push_back(segmentList->GetInitialization()->ToSegment(baseURLs));
+		pushIfNotNull(segments, segmentList->GetInitialization()->ToSegment(baseURLs));
 
 	if (segmentList->GetBitstreamSwitching())
-		segments.push_back(segmentList->GetBitstreamSwitching()->ToSegment(baseURLs));
+		pushIfNotNull(segments, segmentList->GetBitstreamSwitching()->ToSegment(baseURLs));
 
 	std::vector<ISegmentURL*> segmentURLs = segmentList->GetSegmentURLs();
 	for (size_t i = 0; i < segmentURLs.size(); i++) {
-		ISegment* indexSegment = segmentURLs[i]->ToIndexSegment(baseURLs);
-		if (indexSegment)
-			segments.push_back(indexSegment);
-		ISegment* mediaSegment = segmentURLs[i]->ToMediaSegment(baseURLs);
-		if (mediaSegment)
-			segments.push_back(mediaSegment);
+		pushIfNotNull(segments, segmentURLs[i]->ToIndexSegment(baseURLs));
+		pushIfNotNull(segments, segmentURLs[i]->ToMediaSegment(baseURLs));
 	}
 
 	return segments;
@@ -140,17 +141,15 @@ std::vector<ISegment*> templateSegments(std::vector<IBaseUrl*>& baseURLs, ISegme
 	std::vector<ISegment*> segments;
 
 	if (segmentTemplate->GetInitialization()) {
-		segments.push_back(segmentTemplate->GetInitialization()->ToSegment(baseURLs));
+		pushIfNotNull(segments, segmentTemplate->GetInitialization()->ToSegment(baseURLs));
 	} else {
-		ISegment* s = segmentTemplate->ToInitializationSegment(baseURLs, representation->GetId(), representation->GetBandwidth());
-		if (s) segments.push_back(s);
+		pushIfNotNull(segments, segmentTemplate->ToInitializationSegment(baseURLs, representation->GetId(), representation->GetBandwidth()));
 	}
 
 	if (segmentTemplate->GetBitstreamSwitching()) {
-		segments.push_back(segmentTemplate->GetBitstreamSwitching()->ToSegment(baseURLs));
+		pushIfNotNull(segments, segmentTemplate->GetBitstreamSwitching()->ToSegment(baseURLs));
 	} else {
-		ISegment* s = segmentTemplate->ToBitstreamSwitchingSegment(baseURLs, representation->GetId(), representation->GetBandwidth());
-		if (s) segments.push_back(s);
+		pushIfNotNull(segments, segmentTemplate->ToBitstreamSwitchingSegment(baseURLs, representation->GetId(), representation->GetBandwidth()));
 	}
 
 	if (segmentTemplate->GetSegmentTimeline()) {
@@ -165,18 +164,14 @@ std::vector<ISegment*> templateSegments(std::vector<IBaseUrl*>& baseURLs, ISegme
 		}
 
 		for (size_t i = 0; i < timelines.size(); i++) {
-			ISegment* s = segmentTemplate->GetIndexSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]);
-			if (s) segments.push_back(s);
-			s = segmentTemplate->GetMediaSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]);
-			if (s) segments.push_back(s);
+			pushIfNotNull(segments, segmentTemplate->GetIndexSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]));
+			pushIfNotNull(segments, segmentTemplate->GetMediaSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]));
 		}
 	} else {
 		uint32_t nSegments = 1; // TODO: calculate from overall time and segment duration
 		for (uint32_t i = 0; i < nSegments; i++) {
-			ISegment* s = segmentTemplate->GetIndexSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i);
-			if (s) segments.push_back(s);
-			s = segmentTemplate->GetMediaSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i);
-			if (s) segments.push_back(s);
+			pushIfNotNull(segments, segmentTemplate->GetIndexSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i));
+			pushIfNotNull(segments, segmentTemplate->GetMediaSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i));
 		}
 	}
 
@@ -188,9 +183,9 @@ std::vector<ISegment*> representationSegments(std::vector<IBaseUrl*>& baseURLs, 
 	if (representation->GetSegmentList()) {
 		return listSegments(baseURLs, representation->GetSegmentList());
 	} else if (representation->GetSegmentTemplate()) {
-		return templateSegments(baseURLs, adaptationSet->GetSegmentTemplate(), representation);
+		return templateSegments(baseURLs, representation->GetSegmentTemplate(), representation);
 	} else if (representation->GetSegmentBase()) {
-		return baseSegments(baseURLs, adaptationSet->GetSegmentBase(), representation);
+		return baseSegments(baseURLs, representation->GetSegmentBase(), representation);
 	} else if (adaptationSet->GetSegmentList()) {
 		return listSegments(baseURLs, adaptationSet->GetSegmentList());
 	} else if (adaptationSet->GetSegmentTemplate()) {
@@ -230,19 +225,49 @@ void dumpRepresentationInfo(IRepresentation *r) {
 }
 
 void dumpTransactionInfo(IHTTPTransaction *t) {
-	std::cout << std::endl;
-	std::cout << "Download ended from " << t->OriginalUrl() << std::endl;
-	std::cout << "Response code: " << t->ResponseCode() << std::endl;
-	std::cout << "HTTP Header: " << t->HTTPHeader() << std::endl;
 }
 
-struct DownloadTracker : public IDownloadObserver {
+class DownloadTracker : public IDownloadObserver {
+private:
+	uint64_t startTime;
+
+public:
 	DownloadState state = NOT_STARTED;
+	uint64_t dlTime; // in ms
+
 	void OnDownloadRateChanged  (uint64_t bytesDownloaded) {}
 	void OnDownloadStateChanged (DownloadState state) {
 		this->state = state;
+		switch(state) {
+			case IN_PROGRESS:
+				this->startTime = GetTickCount64();
+				break;
+			case COMPLETED:
+			case ABORTED:
+				this->dlTime = GetTickCount64() - this->startTime;
+				break;
+			default:
+				break;
+		}
 	}
 };
+
+void downloadSegment(ISegment* s) {
+	DownloadTracker downloadTracker;
+	s->AttachDownloadObserver(&downloadTracker);
+	s->StartDownload();
+	while (downloadTracker.state != COMPLETED && downloadTracker.state != ABORTED)
+		Sleep(100);
+
+	std::cout << std::endl;
+	std::cout << "Download time: " << downloadTracker.dlTime << "ms" << std::endl;
+	std::vector<IHTTPTransaction*> transactions = s->GetHTTPTransactionList();
+	for (size_t i = 0; i < transactions.size(); i++) {
+		std::cout << "Download ended from " << transactions[i]->OriginalUrl() << std::endl;
+		std::cout << "Response code: " << transactions[i]->ResponseCode() << std::endl;
+		std::cout << "HTTP Header: " << transactions[i]->HTTPHeader() << std::endl;
+	}
+}
 
 int main(int argc, char *argv[]) {
 	if (argc != 2) {
@@ -333,16 +358,8 @@ int main(int argc, char *argv[]) {
 					std::vector<IBaseUrl*> baseURLs = allBaseURLs(mpd, period, adaptationSet);
 					std::vector<ISegment*> segments = representationSegments(baseURLs, mpd, period, adaptationSet, representation);
 					// Just download everything in series for now
-					for (size_t i = 0; i < segments.size(); i++) {
-						DownloadTracker downloadTracker;
-						segments[i]->AttachDownloadObserver(&downloadTracker);
-						segments[i]->StartDownload();
-						while (downloadTracker.state != COMPLETED && downloadTracker.state != ABORTED)
-							Sleep(100);
-						std::vector<IHTTPTransaction*> transactions = segments[i]->GetHTTPTransactionList();
-						for (size_t i = 0; i < transactions.size(); i++)
-							dumpTransactionInfo(transactions[i]);
-					}
+					for (size_t i = 0; i < segments.size(); i++)
+						downloadSegment(segments[i]);
 				}
 			}
 		}
