@@ -1,5 +1,11 @@
 #include <windows.h>
 #include "libdash.h"
+extern "C"
+{
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
+}
 
 using namespace dash;
 using namespace dash::mpd;
@@ -253,6 +259,20 @@ public:
 	}
 };
 
+void decoderInfo(const char* URL) { // TODO: use downloaded data
+	std::cout << std::endl << "Decoding video" << std::endl;
+
+	AVFormatContext* ctx = avformat_alloc_context();
+
+	if (avformat_open_input(&ctx, URL, NULL, NULL) < 0) {
+		std::cout << "Error opening video" << std::endl;
+		return;
+	}
+	std::cout << "Opened video" << std::endl;
+	avformat_find_stream_info(ctx, NULL);
+	av_dump_format(ctx, 0, URL, 0);
+}
+
 void downloadSegment(ISegment* s) {
 	DownloadTracker downloadTracker;
 	s->AttachDownloadObserver(&downloadTracker);
@@ -272,6 +292,7 @@ void downloadSegment(ISegment* s) {
 			std::cout << "Download succeeeded from " << transactions[i]->OriginalUrl() << std::endl;
 			std::cout << "Response code: " << transactions[i]->ResponseCode() << std::endl;
 			std::cout << "HTTP Header: " << transactions[i]->HTTPHeader() << std::endl;
+			decoderInfo(transactions[i]->OriginalUrl().c_str());
 		}
 	}
 }
@@ -290,6 +311,8 @@ int main(int argc, char *argv[]) {
 		std::cerr << "Failed to read MPD" << std::endl;
 		return 1;
 	}
+
+	av_register_all();
 
 	const std::vector<IBaseUrl *> baseURLs = mpd->GetBaseUrls();
 	if (!baseURLs.empty()) {
