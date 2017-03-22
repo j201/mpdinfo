@@ -298,13 +298,40 @@ void downloadSegment(ISegment* s) {
 }
 
 int main(int argc, char *argv[]) {
-	if (argc != 2) {
-		std::cerr << "Usage: mpdinfo.exe <MPD URL>" << std::endl;
+	if (argc < 2) {
+		std::cerr << "Usage: mpdinfo.exe <MPD URL> [-h] [--r-index N] [--r-id ID]" << std::endl;
+		return 1;
+	}
+	char* URL;
+	int rIndex = -1;
+	char* rID = NULL;
+	for (int i = 0; i < argc; i++) {
+		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+			std::cerr << "Usage: mpdinfo.exe <MPD URL> [-h] [--r-index N] [--r-id ID]" << std::endl;
+			std::cerr << "--r-index: Selects a representation to download by index" << std::endl;
+			std::cerr << "--r-id: Selects a representation to download by ID" << std::endl;
+			return 0;
+		} else if (strcmp(argv[i], "--r-index") == 0) {
+			rIndex = atoi(argv[i+1]);
+			i++;
+		} else if (strcmp(argv[i], "--r-id") == 0) {
+			rID = argv[i+1];
+			i++;
+		} else {
+			URL = argv[i];
+		}
+	}
+	// Default to the first representation
+	if (rIndex == -1 && rID == NULL) {
+		rIndex = 0;
+	}
+	if (URL == NULL) {
+		std::cerr << "Error: no URL specified" << std::endl;
 		return 1;
 	}
 
 	IDASHManager* dashManager = CreateDashManager();
-	std::cout << argv[1] << std::endl;
+	std::cout << URL << std::endl;
 	IMPD* mpd = dashManager->Open(argv[1]);
 
 	if (mpd == NULL) {
@@ -313,6 +340,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	av_register_all();
+	avformat_network_init();
 
 	const std::vector<IBaseUrl *> baseURLs = mpd->GetBaseUrls();
 	if (!baseURLs.empty()) {
@@ -381,10 +409,17 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				if (!representations.empty()) {
-					// For now, only try to download the first representation
-					IRepresentation* representation = representations[0];
+				// Download a representation if required
+				IRepresentation* representation = NULL;
 
+				for (size_t i = 0; i < representations.size(); i++) {
+					if (i == rIndex || representations[i]->GetId().compare(rID) == 0) {
+						representation = representations[i];
+						break;
+					}
+				}
+
+				if (representation != NULL) {
 					std::vector<IBaseUrl*> baseURLs = allBaseURLs(mpd, period, adaptationSet);
 					std::vector<ISegment*> segments = representationSegments(baseURLs, mpd, period, adaptationSet, representation);
 					// Just download everything in series for now
