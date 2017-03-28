@@ -280,6 +280,8 @@ void decoderInfo(ISegment* segment) { // TODO: use downloaded data
 	std::cout << "Opened video" << std::endl;
 	avformat_find_stream_info(ctx, NULL);
 	av_dump_format(ctx, 0, "", 0);
+
+    avformat_close_input(&ctx);
 }
 
 void downloadSegment(ISegment* s) {
@@ -432,8 +434,10 @@ int main(int argc, char *argv[]) {
 					std::vector<IBaseUrl*> baseURLs = allBaseURLs(mpd, period, adaptationSet);
 					std::vector<ISegment*> segments = representationSegments(baseURLs, mpd, period, adaptationSet, representation);
 					// Just download everything in series for now
-					for (size_t i = 0; i < segments.size(); i++)
+					for (size_t i = 0; i < segments.size(); i++) {
 						downloadSegment(segments[i]);
+						delete segments[i];
+					}
 				}
 			}
 		}
