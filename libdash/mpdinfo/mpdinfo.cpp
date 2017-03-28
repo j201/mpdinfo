@@ -259,18 +259,27 @@ public:
 	}
 };
 
-void decoderInfo(const char* URL) { // TODO: use downloaded data
+int readPacket(void* opaque, uint8_t* buffer, int len) {
+	return ((ISegment*)opaque)->Read(buffer, len);
+}
+
+void decoderInfo(ISegment* segment) { // TODO: use downloaded data
 	std::cout << std::endl << "Decoding video" << std::endl;
 
 	AVFormatContext* ctx = avformat_alloc_context();
 
-	if (avformat_open_input(&ctx, URL, NULL, NULL) < 0) {
+	uint8_t* buffer = (uint8_t*)av_malloc(32768);
+	ctx->pb = avio_alloc_context(buffer, 32768, 0, segment, readPacket, NULL, NULL);
+	ctx->pb->seekable = 0;
+	ctx->flags = AVFMT_FLAG_CUSTOM_IO;
+
+	if (avformat_open_input(&ctx, "", NULL, NULL) < 0) {
 		std::cout << "Error opening video" << std::endl;
 		return;
 	}
 	std::cout << "Opened video" << std::endl;
 	avformat_find_stream_info(ctx, NULL);
-	av_dump_format(ctx, 0, URL, 0);
+	av_dump_format(ctx, 0, "", 0);
 }
 
 void downloadSegment(ISegment* s) {
@@ -292,8 +301,8 @@ void downloadSegment(ISegment* s) {
 			std::cout << "Download succeeeded from " << transactions[i]->OriginalUrl() << std::endl;
 			std::cout << "Response code: " << transactions[i]->ResponseCode() << std::endl;
 			std::cout << "HTTP Header: " << transactions[i]->HTTPHeader() << std::endl;
-			decoderInfo(transactions[i]->OriginalUrl().c_str());
 		}
+		decoderInfo(s);
 	}
 }
 
