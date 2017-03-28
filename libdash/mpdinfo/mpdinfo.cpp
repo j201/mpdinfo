@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <fstream>
 #include "libdash.h"
 extern "C"
 {
@@ -263,23 +264,45 @@ int readPacket(void* opaque, uint8_t* buffer, int len) {
 	return ((ISegment*)opaque)->Read(buffer, len);
 }
 
-void decoderInfo(ISegment* segment) { // TODO: use downloaded data
+std::string writeToTempFile(ISegment* s, size_t size) {
+	FILE* f;
+	if (tmpfile_s(&f)) {
+		std::cerr << "Error creating temp file" << std::endl;
+		return "";
+	}
+
+	char tempPath[MAX_PATH];
+	char fileName[MAX_PATH];
+	GetTempPathA(MAX_PATH, tempPath);
+	GetTempFileNameA(tempPath, "", 0, fileName);
+
+	int bytesLeft = size;
+	int bytesRead = 0;
+	const int bufferSize = 32768;
+	uint8_t* buffer = new uint8_t[bufferSize];
+	std::ofstream fs;
+	fs.open(fileName, std::ios::binary | std::ios::out);
+	do {
+		bytesRead = s->Read(buffer, min(bufferSize, bytesLeft));
+		fs.write((char*)buffer, bytesRead);
+	} while (bytesLeft > 0 && bytesRead > 0);
+	fs.close();
+
+	return std::string(fileName);
+}
+
+void decoderInfo(ISegment* segment, std::string fileName) {
 	std::cout << std::endl << "Decoding video" << std::endl;
 
 	AVFormatContext* ctx = avformat_alloc_context();
 
-	uint8_t* buffer = (uint8_t*)av_malloc(32768);
-	ctx->pb = avio_alloc_context(buffer, 32768, 0, segment, readPacket, NULL, NULL);
-	ctx->pb->seekable = 0;
-	ctx->flags = AVFMT_FLAG_CUSTOM_IO;
-
-	if (avformat_open_input(&ctx, "", NULL, NULL) < 0) {
+	if (avformat_open_input(&ctx, fileName.c_str(), NULL, NULL) < 0) {
 		std::cout << "Error opening video" << std::endl;
 		return;
 	}
 	std::cout << "Opened video" << std::endl;
 	avformat_find_stream_info(ctx, NULL);
-	av_dump_format(ctx, 0, "", 0);
+	av_dump_format(ctx, 0, fileName.c_str(), 0);
 
     avformat_close_input(&ctx);
 }
@@ -304,7 +327,12 @@ void downloadSegment(ISegment* s) {
 			std::cout << "Response code: " << transactions[i]->ResponseCode() << std::endl;
 			std::cout << "HTTP Header: " << transactions[i]->HTTPHeader() << std::endl;
 		}
-		decoderInfo(s);
+
+		std::string fileName = writeToTempFile(s, downloadTracker.bytesDownloaded);
+		if (!fileName.empty())
+			decoderInfo(s, fileName);
+		if (remove(fileName.c_str()) != 0)
+			std::cerr << "Failed to delete temp file";
 	}
 }
 
