@@ -329,7 +329,8 @@ void decoderInfo(std::string fileName) {
 }
 
 // Downloads a segment and prints out download metrics and decoding results
-void downloadSegment(ISegment* s) {
+// Prints out downloaded file location and doesn't delete it if preserve is true
+void downloadSegment(ISegment* s, bool preserve) {
 	DownloadTracker downloadTracker;
 	s->AttachDownloadObserver(&downloadTracker);
 	s->StartDownload();
@@ -351,34 +352,55 @@ void downloadSegment(ISegment* s) {
 		}
 
 		std::string fileName = writeToTempFile(s, downloadTracker.bytesDownloaded);
+		if (preserve)
+			std::cout << "Wrote downloaded video to file " << fileName << std::endl;
 		if (!fileName.empty())
 			decoderInfo(fileName);
-		if (remove(fileName.c_str()) != 0)
-			std::cerr << "Failed to delete temp file";
+		if (!preserve) {
+			if (remove(fileName.c_str()) != 0)
+				std::cerr << "Failed to delete temp file";
+		}
 	}
 }
 
 int main(int argc, char *argv[]) {
 	if (argc < 2) {
-		std::cerr << "Usage: mpdinfo.exe <MPD URL> [-h] [--r-index N] [--r-id ID]" << std::endl;
+		std::cerr << "Usage: mpdinfo.exe <MPD URL> [-h] [--r-index N] [--r-id ID] [--preserve]" << std::endl;
 		return 1;
 	}
-	char* URL;
+	char* URL = NULL;
 	int rIndex = -1;
 	char* rID = NULL;
-	for (int i = 0; i < argc; i++) {
+	bool preserve = false;
+	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
 			std::cerr << "Usage: mpdinfo.exe <MPD URL> [-h] [--r-index N] [--r-id ID]" << std::endl;
 			std::cerr << "--r-index: Selects a representation to download by index" << std::endl;
 			std::cerr << "--r-id: Selects a representation to download by ID" << std::endl;
+			std::cerr << "--preserve: Preserves downloaded video files and prints out their locations" << std::endl;
 			return 0;
 		} else if (strcmp(argv[i], "--r-index") == 0) {
 			rIndex = atoi(argv[i+1]);
+			if (rID != NULL) {
+				std::cerr << "Only one of --r-index and --r-id can be specified" << std::endl;
+				return 1;
+			}
 			i++;
 		} else if (strcmp(argv[i], "--r-id") == 0) {
 			rID = argv[i+1];
+			if (rIndex != -1) {
+				std::cerr << "Only one of --r-index and --r-id can be specified" << std::endl;
+				return 1;
+			}
 			i++;
+		} else if (strcmp(argv[i], "--preserve") == 0) {
+			preserve = true;
 		} else {
+			if (URL != NULL) {
+				std::cerr << "Multiple URLs specified or an invalid argument passed" << std::endl;
+				std::cerr << "Run 'mpdinfo -h' for usage" << std::endl;
+				return 1;
+			}
 			URL = argv[i];
 		}
 	}
@@ -487,7 +509,7 @@ int main(int argc, char *argv[]) {
 					std::vector<ISegment*> segments = representationSegments(baseURLs, mpd, period, adaptationSet, representation);
 					// Just download everything in series for now
 					for (size_t i = 0; i < segments.size(); i++) {
-						downloadSegment(segments[i]);
+						downloadSegment(segments[i], preserve);
 						delete segments[i];
 					}
 				}
