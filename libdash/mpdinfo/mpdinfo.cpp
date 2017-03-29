@@ -13,6 +13,9 @@ using namespace dash::mpd;
 using namespace dash::network;
 using namespace dash::metrics;
 
+// Finds the mime type for the given adaptation set and looks for whether the
+// given string is a substring of it. Used for finding if an adaptation set
+// contains video or audio.
 bool isContainedInMimeType(dash::mpd::IAdaptationSet *adaptationSet, std::string value) {
 	std::string topMimeType = adaptationSet->GetMimeType();
 	if (!topMimeType.empty())
@@ -29,6 +32,7 @@ bool isContainedInMimeType(dash::mpd::IAdaptationSet *adaptationSet, std::string
 	return false;
 }
 
+// If the value exists, returns a human-readable, indented string representation
 std::string showProperty(const char* name, std::string value) {
 	if (value.empty()) return std::string("");
 	std::ostringstream os;
@@ -36,6 +40,7 @@ std::string showProperty(const char* name, std::string value) {
 	return os.str();
 }
 
+// Convert a vector of strings into a comma-separated string
 std::string showVector(const std::vector<std::string>& v) {
 	std::ostringstream os;
 	for (size_t i = 0; i < v.size(); i++) {
@@ -47,6 +52,7 @@ std::string showVector(const std::vector<std::string>& v) {
 	return os.str();
 }
 
+// Returns human-readable information for a representation base object
 std::string representationBaseInfo(IRepresentationBase *r) {
 	std::ostringstream os;
 	os << "  Resolution: " << r->GetWidth() << "x" << r->GetHeight() << std::endl;
@@ -60,6 +66,8 @@ std::string representationBaseInfo(IRepresentationBase *r) {
 	return os.str();
 }
 
+// Returns human-readable information for a segment object, handling different
+// kinds of segments. (Inputs are skipped if null)
 std::string segmentInfo(ISegmentTemplate* segmentTemplate, ISegmentBase* segmentBase, ISegmentList* segmentList) {
 	std::ostringstream os;
 	if (segmentTemplate) {
@@ -85,6 +93,8 @@ std::string segmentInfo(ISegmentTemplate* segmentTemplate, ISegmentBase* segment
 	return os.str();
 }
 
+// Finds all of the base URLs for an adaptation set. If no base URL exists,
+// uses the path that the MPD was downloaded from.
 std::vector<IBaseUrl*> allBaseURLs(IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet) {
 	std::vector<IBaseUrl*> baseURLs;
 
@@ -110,6 +120,8 @@ void pushIfNotNull(std::vector<T> &v, T t) {
 		v.push_back(t);
 }
 
+// Find all segments for a representation using a base segment representation
+// (i.e., not a list or a template)
 std::vector<ISegment*> baseSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentBase* segmentBase, IRepresentation *representation) {
 	std::vector<ISegment*> segments;
 
@@ -126,6 +138,7 @@ std::vector<ISegment*> baseSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentBa
 	return segments;
 }
 
+// Find all segments for a representation using a segment list
 std::vector<ISegment*> listSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentList* segmentList) {
 	std::vector<ISegment*> segments;
 
@@ -144,6 +157,9 @@ std::vector<ISegment*> listSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentLi
 	return segments;
 }
 
+// Find all segments for a representation using a segment template, except if
+// an unspecified number of segments are to be played, in which case only the
+// first one is returned
 std::vector<ISegment*> templateSegments(std::vector<IBaseUrl*>& baseURLs, ISegmentTemplate* segmentTemplate, IRepresentation *representation) {
 	std::vector<ISegment*> segments;
 
@@ -175,7 +191,9 @@ std::vector<ISegment*> templateSegments(std::vector<IBaseUrl*>& baseURLs, ISegme
 			pushIfNotNull(segments, segmentTemplate->GetMediaSegmentFromTime(baseURLs, representation->GetId(), representation->GetBandwidth(), startTimes[i]));
 		}
 	} else {
-		uint32_t nSegments = 1; // TODO: calculate from overall time and segment duration
+		// In some cases, nSegments could be calculated from the segment duration and overall duration,
+		// but the overall duration isn't already given, in which case the video seems to continue indefinitely.
+		uint32_t nSegments = 1;
 		for (uint32_t i = 0; i < nSegments; i++) {
 			pushIfNotNull(segments, segmentTemplate->GetIndexSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i));
 			pushIfNotNull(segments, segmentTemplate->GetMediaSegmentFromNumber(baseURLs, representation->GetId(), representation->GetBandwidth(), segmentTemplate->GetStartNumber() + i));
@@ -185,7 +203,7 @@ std::vector<ISegment*> templateSegments(std::vector<IBaseUrl*>& baseURLs, ISegme
 	return segments;
 }
 
-
+// Find all segments for a representation
 std::vector<ISegment*> representationSegments(std::vector<IBaseUrl*>& baseURLs, IMPD *mpd, IPeriod *period, IAdaptationSet *adaptationSet, IRepresentation *representation) {
 	if (representation->GetSegmentList()) {
 		return listSegments(baseURLs, representation->GetSegmentList());
@@ -216,6 +234,7 @@ std::vector<ISegment*> representationSegments(std::vector<IBaseUrl*>& baseURLs, 
 	return std::vector<ISegment*>();
 }
 
+// Print out human-readable information about a representation and its segments
 void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << "Representation " << r->GetId() << std::endl;
 	std::cout << "  Bandwidth: " << r->GetBandwidth() << "bps" << std::endl;
@@ -231,6 +250,8 @@ void dumpRepresentationInfo(IRepresentation *r) {
 	std::cout << segmentInfo(r->GetSegmentTemplate(), r->GetSegmentBase(), r->GetSegmentList());
 }
 
+// A tracker class for use with a libav IDownloadableChunk.
+// Used to track segment downloading
 class DownloadTracker : public IDownloadObserver {
 private:
 	uint64_t startTime;
@@ -260,10 +281,8 @@ public:
 	}
 };
 
-int readPacket(void* opaque, uint8_t* buffer, int len) {
-	return ((ISegment*)opaque)->Read(buffer, len);
-}
-
+// Writes out the data for the given segment to a temp file and return its path.
+// The segment must have been already downloaded.
 std::string writeToTempFile(ISegment* s, size_t size) {
 	FILE* f;
 	if (tmpfile_s(&f)) {
@@ -291,7 +310,9 @@ std::string writeToTempFile(ISegment* s, size_t size) {
 	return std::string(fileName);
 }
 
-void decoderInfo(ISegment* segment, std::string fileName) {
+// Decodes the header of the given file and prints out the information on it
+// given by libav
+void decoderInfo(std::string fileName) {
 	std::cout << std::endl << "Decoding video" << std::endl;
 
 	AVFormatContext* ctx = avformat_alloc_context();
@@ -307,6 +328,7 @@ void decoderInfo(ISegment* segment, std::string fileName) {
     avformat_close_input(&ctx);
 }
 
+// Downloads a segment and prints out download metrics and decoding results
 void downloadSegment(ISegment* s) {
 	DownloadTracker downloadTracker;
 	s->AttachDownloadObserver(&downloadTracker);
@@ -330,7 +352,7 @@ void downloadSegment(ISegment* s) {
 
 		std::string fileName = writeToTempFile(s, downloadTracker.bytesDownloaded);
 		if (!fileName.empty())
-			decoderInfo(s, fileName);
+			decoderInfo(fileName);
 		if (remove(fileName.c_str()) != 0)
 			std::cerr << "Failed to delete temp file";
 	}
@@ -369,6 +391,9 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	av_register_all();
+	avformat_network_init();
+
 	IDASHManager* dashManager = CreateDashManager();
 	std::cout << URL << std::endl;
 	IMPD* mpd = dashManager->Open(argv[1]);
@@ -378,9 +403,6 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	av_register_all();
-	avformat_network_init();
-
 	const std::vector<IBaseUrl *> baseURLs = mpd->GetBaseUrls();
 	if (!baseURLs.empty()) {
 		std::cout << "MPD Base URLs:" << std::endl;
@@ -389,6 +411,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	// Iterate through the MPD periods, then adaptation sets, then
+	// representations, then segments, showing information about each
 	for (size_t i = 0; i < mpd->GetPeriods().size(); i++) {
 		IPeriod *period = mpd->GetPeriods().at(i);
 		std::cout << "Period " << i << std::endl;
@@ -448,7 +472,7 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				// Download a representation if required
+				// Download the segments for a representation if required
 				IRepresentation* representation = NULL;
 
 				for (size_t i = 0; i < representations.size(); i++) {
